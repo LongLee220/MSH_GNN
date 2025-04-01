@@ -8,7 +8,8 @@ import torch.distributed as dist
 
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.utils.data.distributed import DistributedSampler
-from torch.cuda.amp import autocast, GradScaler
+#from torch.cuda.amp import autocast, GradScaler
+from torch.amp import autocast, GradScaler
 from utils.utils import N2DataLoader
 from torch_geometric.datasets import TUDataset
 from torch_geometric.loader import DataLoader
@@ -23,12 +24,18 @@ from sklearn.model_selection import KFold
 from torch.utils.data import Subset
 from sklearn.metrics import roc_auc_score
 from utils.loss import bcelogits_loss, weighted_cross_entropy, float_bcelogits_loss
+from torch_geometric.utils import softmax
+
+
 
 # ---- 1. 数据加载 ----
 def load_data():
     dataset = TUDataset(root='data/TUDataset', name='IMDB-MULTI')
     return dataset
-#IMDB-BINARY
+
+
+
+
 # ---- 2. 每个节点一个 MLP 的 Message Passing 层 ----
 class FourierBaseDynamic(nn.Module):
     def __init__(self, in_dim, fourier_dim):
@@ -60,8 +67,42 @@ class FourierBaseDynamic(nn.Module):
         out = self.out_proj(emb)
         return out
     
+'''
+class PerNodeFourierGAT(MessagePassing):
+    def __init__(self, in_dim, hidden_dim, out_dim):
+        super().__init__(aggr='add')  
+        self.fourier = FourierBaseDynamic(in_dim, out_dim)
+
+        att_in_dim = in_dim + out_dim  
+        self.att_mlp = nn.Sequential(
+            nn.Linear(att_in_dim, 1),
+            nn.LeakyReLU(0.2)
+        )
 
 
+        self.update_mlp = nn.Sequential(
+            nn.Linear(in_dim + out_dim, hidden_dim),
+            nn.ReLU(),
+            nn.Linear(hidden_dim, out_dim)
+        )
+
+    def forward(self, x, edge_index):
+        edge_index, _ = add_self_loops(edge_index, num_nodes=x.size(0))
+        return self.propagate(edge_index, x=x)
+
+    def message(self, x_i, x_j, edge_index_i):
+        msg = self.fourier(h_src=x_j, h_i=x_i)
+        att_input = torch.cat([msg, x_i], dim=-1)
+        att_score = self.att_mlp(att_input).squeeze(-1)
+        att_weight = softmax(att_score, index=edge_index_i)
+        return msg * att_weight.view(-1, 1)
+
+    def update(self, aggr_out, x):
+        out = self.update_mlp(torch.cat([x, aggr_out], dim=-1))
+        return out
+    
+
+'''
 
 class PerNodeFourierMP(MessagePassing):
     def __init__(self, in_dim, hidden_dim, out_dim):
@@ -90,12 +131,13 @@ class PerNodeFourierMP(MessagePassing):
     
 
 # ---- 3. 图分类模型 ----
+'''
 class MoleculeGNN_Fourier(nn.Module):
-    def __init__(self, in_dim, hidden_dim, out_dim, num_classes, dropout=0.2):
+    def __init__(self, in_dim, hidden_dim, out_dim, num_classes, dropout=0.0):
         super().__init__()
         self.conv1 = PerNodeFourierMP(in_dim, hidden_dim, out_dim)
         self.bn1 = nn.BatchNorm1d(out_dim)
-
+        # self.conv2 = PerNodeFourierMP(out_dim, hidden_dim, out_dim)
         self.conv2 = PerNodeFourierMP(out_dim, hidden_dim, out_dim)
         self.bn2 = nn.BatchNorm1d(out_dim)
 
@@ -108,6 +150,55 @@ class MoleculeGNN_Fourier(nn.Module):
             nn.Linear(hidden_dim, num_classes)
         )
 
+    def forward(self, data):
+        x, edge_index, batch = data.x, data.edge_index, data.batch
+
+        x = self.conv1(x, edge_index)
+        #x = self.bn1(x)
+        x = F.relu(x)
+        #x = F.silu(x)
+        x = self.dropout(x)
+
+        x = self.conv2(x, edge_index)
+        #x = self.bn2(x)
+        x = F.relu(x)
+        x = self.dropout(x)
+
+        return self.classifier(x)
+'''
+
+
+
+class MoleculeGNN_Fourier(nn.Module):
+    def __init__(self, in_dim, hidden_dim, out_dim, num_classes, 
+                 num_layers=8, dropout=0.0, use_bn=False, use_residual=True, act='relu'):
+        super().__init__()
+        self.num_layers = num_layers
+        self.use_bn = use_bn
+        self.use_residual = use_residual
+        self.dropout = nn.Dropout(dropout)
+        
+        # 激活函数选择
+        self.act = {
+            'relu': F.relu,
+            'silu': F.silu,
+            'gelu': F.gelu,
+        }[act]
+
+        self.convs = nn.ModuleList()
+        self.bns = nn.ModuleList()
+
+        # input layer
+        self.convs.append(PerNodeFourierMP(in_dim, hidden_dim, out_dim))
+        if use_bn:
+            self.bns.append(nn.BatchNorm1d(out_dim))
+
+        # hidden layers
+        for _ in range(num_layers - 1):
+            self.convs.append(PerNodeFourierMP(out_dim, hidden_dim, out_dim))
+            if use_bn:
+                self.bns.append(nn.BatchNorm1d(out_dim))
+
         self.classifier = nn.Sequential(
             nn.Linear(out_dim, hidden_dim),
             nn.ReLU(),
@@ -116,21 +207,22 @@ class MoleculeGNN_Fourier(nn.Module):
         )
 
     def forward(self, data):
-        x, edge_index, batch = data.x, data.edge_index, data.batch
+        x, edge_index = data.x, data.edge_index
 
-        x = self.conv1(x, edge_index)
-        x = self.bn1(x)
-        x = F.relu(x)
-        x = self.dropout(x)
+        for i, conv in enumerate(self.convs):
+            x_res = x  
+            x = conv(x, edge_index)
 
-        x = self.conv2(x, edge_index)
-        x = self.bn2(x)
-        x = F.relu(x)
-        x = self.dropout(x)
+            if self.use_bn:
+                x = self.bns[i](x)
+            x = self.act(x)
+            x = self.dropout(x)
+
+            if self.use_residual and x.shape == x_res.shape:
+                x = x + x_res  
 
         return self.classifier(x)
-
-
+    
 
 class MoleculeGCN(nn.Module):
     def __init__(self, in_dim, hidden_dim, out_dim, num_classes, dropout=0.2):
@@ -196,37 +288,66 @@ scaler = GradScaler()
 def train(model, loader, optimizer, criterion, device):
     model.train()
     total_loss = 0
+    scaler = GradScaler()
+    
     for data in loader:
         data = data.to(device)
         optimizer.zero_grad()
-        with autocast():
+        
+        with autocast(device_type='cuda'):
             out = model(data)
-            loss = criterion(out, data.y)
+
+            if hasattr(data, 'train_mask'):
+                mask = data.train_mask
+                loss = criterion(out[mask], data.y[mask])
+            else:
+                loss = criterion(out, data.y)
+        
         scaler.scale(loss).backward()
         scaler.step(optimizer)
         scaler.update()
-        total_loss += loss.item() * data.num_nodes
-    return total_loss / sum(data.num_nodes for data in loader.dataset)
+
+        if hasattr(data, 'train_mask'):
+            total_loss += loss.item() * mask.sum().item()
+        else:
+            total_loss += loss.item() * data.num_nodes
+
+    total_nodes = sum(
+        int(d.train_mask.sum().item()) if hasattr(d, 'train_mask') else d.num_nodes
+        for d in loader.dataset
+    )
+    return total_loss / total_nodes
+
 
 @torch.no_grad()
 def test(model, loader, device, dataset_name):
     model.eval()
     y_true, y_pred = [], []
+
     for data in loader:
         data = data.to(device)
-        out = model(data)
-        y_true.append(data.y.cpu())
-        y_pred.append(out.detach().cpu())
+        with autocast(device_type='cuda'):
+            out = model(data)
+
+        if hasattr(data, 'test_mask'):
+            mask = data.test_mask
+            y_true.append(data.y[mask].cpu())
+            y_pred.append(out[mask].detach().cpu())
+        else:
+            y_true.append(data.y.cpu())
+            y_pred.append(out.detach().cpu())
 
     y_true = torch.cat(y_true, dim=0)
     y_pred = torch.cat(y_pred, dim=0)
 
+
     acc_datasets = [
         "AmazonComputers", "AmazonPhoto", "CoauthorCS", 
-        "CoauthorPhysics", "arxiv-year", "ogbn-arxiv"
+        "CoauthorPhysics", "arxiv-year", "ogbn-arxiv",
+        'amazon-ratings'
     ]
     roc_datasets = [
-        'amazon-ratings', 'minesweeper', 'tolokers', 
+        'minesweeper', 'tolokers', 
         'questions', 'genius', 'ogbn-proteins'
     ]
 
@@ -274,6 +395,7 @@ def main_worker(local_rank, args):
         metric = data_loader.metric
         task_type = data_loader.task_type
 
+        #print("nedgefeats shape:", nedgefeats.shape)
         train_dataset = data_loader.train_data.dataset
         val_dataset = data_loader.val_data.dataset
         test_dataset = data_loader.test_data.dataset
@@ -283,12 +405,17 @@ def main_worker(local_rank, args):
         val_loader = DataLoader(val_dataset, batch_size=args.nbatch, shuffle=False)
         test_loader = DataLoader(test_dataset, batch_size=args.nbatch, shuffle=False)
 
-        in_dim = train_dataset[0].x.shape[1]
         num_classes = nclass
-        print("in dim is :", in_dim)
+        print("node freature dim is :", nfeats)
+        if args.dataset == "minesweeper":
+            num_layers = 15
+            hidden_dim = 64
+            out_dim = 16
+            dropout = 0.1
+            use_bn = False
         
         model = MoleculeGNN_Fourier(
-            in_dim=in_dim,
+            in_dim=nfeats,
             hidden_dim=64,
             out_dim=16,
             num_classes=num_classes,
