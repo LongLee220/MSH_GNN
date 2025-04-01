@@ -21,9 +21,10 @@ amazon_datasets = {
     "amazon_electronics_computers": "data/amazon/amazon_electronics_computers.npz",
     "amazon_electronics_photo": "data/amazon/amazon_electronics_photo.npz"
 }
+
 coauthor_datasets = {
-    "coauthor_cs": "data/coauthor/coauthor_cs.npz",
-    "coauthor_physics": "data/coauthor/coauthor_physics.npz"
+    "ms_academic_cs": "data/coauthor/ms_academic_cs.npz",
+    "ms_academic_phy": "data/coauthor/ms_academic_phy.npz"
 }
 
 # === yandex heterophilous ===
