@@ -7,6 +7,18 @@
 - RDKit (if applicable)  
 - CUDA >= 11.0 (for GPU training)  
 
+
+## Dataset
+###  Homophilic Graph Datasets
+"AmazonComputers", "AmazonPhoto", "CoauthorCS", "CoauthorPhysics" dataset:
+
+https://github.com/shchur/gnn-benchmark/raw/master/data/npz/
+
+###  Heterophilic Graph Datasets
+'amazon-ratings', 'minesweeper', 'tolokers', 'questions' dataset :
+
+https://github.com/yandex-research/heterophilous-graphs/tree/main/data
+
 ## Submit Script
 ### For single GPU:
 
