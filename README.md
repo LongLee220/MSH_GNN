@@ -19,6 +19,9 @@ https://github.com/shchur/gnn-benchmark/raw/master/data/npz/
 
 https://github.com/yandex-research/heterophilous-graphs/tree/main/data
 
+```bash
+python download_dataset.py
+```
 ## Submit Script
 ### For single GPU:
 
