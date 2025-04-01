@@ -1,12 +1,24 @@
 # Fourier_based-MPNN
 ![Fourier-based_Message_Passing](Fourier-based_Message_Passing.jpg)
-# Envioronment
+## Envioronment
+- Python >= 3.8  
+- PyTorch >= 1.12  
+- PyTorch Geometric  
+- RDKit (if applicable)  
+- CUDA >= 11.0 (for GPU training)  
 
+## Submit Script
+### For single GPU:
 
-# Submit Script
+```bash
+python main.py --dataset NCI1
+```
+### For multi-GPU:
+```bash
+torchrun --nproc_per_node=2 multi_gpu_main.py --dataset COLLAB
+```
 
-
-# Results
+## Results
 ### Table: Graph classification results on small-scale benchmarks (Accuracy %)
 
 | Method                          | PROTEINS       | NCI1           | IMDB-B         | IMDB-M         | COLLAB         |
