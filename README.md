@@ -44,3 +44,8 @@ torchrun --nproc_per_node=2 multi_gpu_main.py --dataset COLLAB
 | GMT                             | 75.09 ±0.59    | 76.35 ±2.22    | 73.48 ±0.66    | 50.66 ±0.82    | 80.74 ±0.54    |
 | N² (Sun et al. 2024)           | 77.53 ±1.78    | 83.52 ±1.75    | 79.95 ±2.46    | 57.31 ±2.19    | 86.72 ±1.62    |
 | **FourierMP (Ours)**           | **78.69±2.01** | **88.59±3.34** | **86.28±0.74** | **61.07±0.38** |                |
+
+
+## Reference code
+https://github.com/sunjss/N2
+
