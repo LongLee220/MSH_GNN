@@ -10,12 +10,12 @@
 
 ## Dataset
 ###  Homophilic Graph Datasets
-"AmazonComputers", "AmazonPhoto", "CoauthorCS", "CoauthorPhysics" dataset:
+"AmazonComputers", "AmazonPhoto", "CoauthorCS", "CoauthorPhysics" datasets:
 
 https://github.com/shchur/gnn-benchmark/raw/master/data/npz/
 
 ###  Heterophilic Graph Datasets
-'amazon-ratings', 'minesweeper', 'tolokers', 'questions' dataset :
+"amazon-ratings", "minesweeper", "tolokers", "questions" datasets :
 
 https://github.com/yandex-research/heterophilous-graphs/tree/main/data
 
