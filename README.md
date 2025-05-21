@@ -1,5 +1,5 @@
 # Fourier_based-MPNN
-![Fourier-based_Message_Passing](MSH_GNN (1).jpg)
+![Fourier-based_Message_Passing](message_passing.jpg)
 ## Envioronment
 - Python >= 3.8  
 - PyTorch >= 1.12  
