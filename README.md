@@ -1,5 +1,5 @@
-# Fourier_based-MPNN
-![Fourier-based_Message_Passing](message_passing.jpg)
+# Architecture
+![message_passing](message_passing.jpg)
 ## Envioronment
 - Python >= 3.8  
 - PyTorch >= 1.12  
